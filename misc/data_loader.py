@@ -17,7 +17,7 @@ def parse_data(files):
     df['Time'] = pd.to_datetime(df['Time'])
     
     #add an hour to convert to UTC+1
-    df['Time'] += pd.to_timedelta(1,unit='h')
+    df['Time'] += pd.to_timedelta(2,unit='h')
     #Set timestamp to index, allowing for interval aggregation
     df = df.set_index('Time')
     #Remove data during the night for now
@@ -29,3 +29,22 @@ def parse_data(files):
     
     df_5min = df.groupby([pd.Grouper(freq='5Min'),'wayId'])['Speed'].mean().reset_index(name='mean')
     return df_5min
+
+def vectorized_data(df):
+    return df.pivot(index='Time', columns='wayId', values='mean')
+
+def load_network():
+    road_network = gpd.read_file('../data/road_network.geojson').drop('id', axis = 1)
+    forward = road_network.copy().drop(['Oneway', 'MaxSpeedBackward'], axis = 1).rename({'MaxSpeedForward': 'MaxSpeed'}, axis = 1)
+    forward['Heading'] = 'Forward'
+    backward = road_network[lambda x: x['Oneway'] == 0].copy().drop(['Oneway', 'MaxSpeedForward'], axis = 1).rename({'Source': 'Target', 'Target': 'Source', 'MaxSpeedBackward': 'MaxSpeed'}, axis = 1)
+    backward['geometry'] = backward['geometry'].apply(lambda x: LineString(reversed(x.coords)))
+    backward['Heading'] = 'Backward'
+    road_network = forward.append(
+        backward,
+        sort = True
+    )
+    road_network['LinkRef'] = road_network.apply(lambda r: '{WayId}:{Source}:{Target}'.format(**r), axis = 1)
+    road_network.set_index('LinkRef', inplace = True)
+    
+    
