@@ -23,6 +23,8 @@ def parse_data(files):
     #Remove data during the night for now
     df = df.between_time('06:00','22:00')
     
+    #Z-normalize data
+    df['Speed'] = (df['Speed'] - df['Speed'].mean())/df['Speed'].std()
     
     
     df_5min = df.groupby([pd.Grouper(freq='5Min'),'wayId'])['Speed'].mean().reset_index(name='mean')
