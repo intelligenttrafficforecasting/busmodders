@@ -57,3 +57,23 @@ def load_network():
     )
     road_network['LinkRef'] = road_network.apply(lambda r: '{WayId}:{Source}:{Target}'.format(**r), axis = 1)
     road_network.set_index('LinkRef', inplace = True)
+    road_network = road_network[road_network.index.isin(soi)]
+    print('No.: ', len(road_network_reduced))
+    return road_network
+#    matched = pd.read_csv('../data/20181001/vehicle-position-matched-online.csv')
+#    matched['Time'] = pd.to_datetime(matched['Time'])
+#    grp = matched.groupby(['VehicleRef', 'JourneyRef'])
+#    data_filter = matched['JourneyRef'].str.extract('(?P<OperatingDayDate>\d{8})L(?P<LineNumber>\d{4})')['LineNumber'].astype(float).isin([1, 4, 8])
+#    data_filter &= matched['StopPointRef'].isnull()
+#    matched_filter = matched[data_filter].copy()
+#    road_network_reduced = road_network.copy()
+#    road_network_reduced['Count'] = matched_filter.groupby('LinkRef')['Time'].count()
+#    road_network_reduced['Speed_Mean'] = matched_filter.groupby('LinkRef')['Speed'].mean()
+#    road_network_reduced = road_network_reduced[road_network_reduced['Count'] > 0]
+
+def adjacency_matrix(road_network):
+    nodes = road_network[road_network.index.isin(soi)].index.values
+    adjacency_matrix = pd.DataFrame(index = nodes, columns = nodes)
+    for s in nodes:
+        adjacency_matrix.loc[s,:] = (road_network.loc[s]['Target'] == road_network.loc[nodes]['Source']).astype(int)
+    
