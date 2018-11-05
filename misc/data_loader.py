@@ -28,6 +28,17 @@ def parse_data(files):
     
     
     df_5min = df.groupby([pd.Grouper(freq='5Min'),'wayId'])['Speed'].mean().reset_index(name='mean')
+
+    #Make column with minutes and hours
+    df_5min['hour'] = df_5min.Time.apply(lambda x: x.hour)
+    df_5min['minute'] = df_5min.Time.apply(lambda x: x.minute)
+        
+    #Find the max number of minutes
+    total_time = np.max(df_5min.hour*60 + df_5min.minute)
+    
+    #Add column with normalized cumulative minutes
+    df_5min['NormalizedCumulativeMinutes'] = (df_5min.hour*60 + df_5min.minute) / total_time
+
     return df_5min
 
 def vectorized_data(df):
@@ -46,5 +57,3 @@ def load_network():
     )
     road_network['LinkRef'] = road_network.apply(lambda r: '{WayId}:{Source}:{Target}'.format(**r), axis = 1)
     road_network.set_index('LinkRef', inplace = True)
-    
-    
