@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import glob
-
+import numpy as np
 
 class MoviaBusDataset(Dataset):
     """Dataset for Movia Bus data"""
@@ -79,11 +79,11 @@ class MoviaBusDataset(Dataset):
 
         #Interpolate missing values
         if self.__interpolation:
-            df_5min.interpolate(inplace=True)   
+            df_5min.interpolate(limit=15, limit_direction='both',inplace=True)   
 
         return df_5min
 
-    def normalize(self, mean=None, std=None):
+    def normalize(self, mean=None, std=None, individual_roads=True):
         """
         Normalizes the data set. If no arguments is given, the empirical mean and standard deviation from the dataset is used.
         Otherwise the provided mean and standard deviation is used
@@ -94,10 +94,13 @@ class MoviaBusDataset(Dataset):
         """
         #If mean and std is not given, calculate the emperical values
         if mean is None and std is None:
-            df = pd.concat((dataframe for dataframe in self.dataframes))
-            self.mean = df.mean()
-            self.std = df.std()
-        
+            df = pd.concat((dataframe.drop('TimeOfDay', axis=1) for dataframe in self.dataframes))
+            if individual_roads:
+                self.mean = df.mean()
+                self.std = df.std()
+            else:
+                self.mean = np.nanmean(df.values)
+                self.std = np.nanstd(df.values)
         #Otherwise set the given values for mean and std
         elif mean is not None and std is not None:
             self.mean = mean
@@ -131,4 +134,3 @@ class MoviaBusDataset(Dataset):
         #the last column constains the time of day, which we aren't interested in predicting
         target =torch.tensor(self.dataframes[dataframe_idx].iloc[idx_target].values, dtype=torch.float)[:-1]
         return {'data':data, 'target':target}
-
