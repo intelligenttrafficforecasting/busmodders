@@ -107,5 +107,8 @@ data/test/*
 data/train/*
 *.geojson
 
+data_eigil
+.DS_Store
+
 
 .vscode/
