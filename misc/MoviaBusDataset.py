@@ -18,7 +18,8 @@ class MoviaBusDataset(Dataset):
                 normalize = False, \
                 max_future_time_steps = 1, \
                 timeofday = False, \
-                sequence_target = False
+                sequence_target = False, \
+                agg_time = 5 \
                 ):
         """
         
@@ -32,6 +33,7 @@ class MoviaBusDataset(Dataset):
             max_future_time_steps (Int): The maximum number of time steps into the future we want to predict.
             timeofday (Boolean): Flag if you want the data to include the time of day as a continous value between 0 and 1
             sequence_target (Boolean): Flag if you want the target data to be given as a sequence of all timesteps up to max_future_time_steps
+            agg_time (Int): number of minutes to aggregate the meassurements over
         """
         
         self.dataframes = []
@@ -43,6 +45,7 @@ class MoviaBusDataset(Dataset):
         self.__max_future_time_steps = max_future_time_steps
         self.__timeofday = timeofday
         self.__sequence_target = sequence_target
+        self.__agg_time = agg_time
 
         #find all bus data in the given directory
         files = glob.glob('{}/*/vehicle-position-matched-online.csv'.format(root_dir))
@@ -85,7 +88,7 @@ class MoviaBusDataset(Dataset):
         df = df.between_time('06:00','22:00')
         
         #Aggregate data for each road into 5min bins.
-        df_5min = df.groupby([pd.Grouper(freq='5Min'),'LinkRef'])['Speed'].mean().reset_index(name='Speed')
+        df_5min = df.groupby([pd.Grouper(freq='{}Min'.format(self.__agg_time)),'LinkRef'])['Speed'].mean().reset_index(name='Speed')
 
         df_5min = df_5min.pivot(index='Time', columns='LinkRef', values='Speed')
 
