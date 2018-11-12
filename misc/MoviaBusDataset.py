@@ -71,7 +71,7 @@ class MoviaBusDataset(Dataset):
         df = df.between_time('06:00','22:00')
         
         #Aggregate data for each road into 5min bins.
-        df_5min = df.groupby([pd.Grouper(freq='5Min'),'LinkRef'])['Speed'].mean().reset_index(name='Speed')
+        df_5min = df.groupby([pd.Grouper(freq='10Min'),'LinkRef'])['Speed'].mean().reset_index(name='Speed')
 
         df_5min = df_5min.pivot(index='Time', columns='LinkRef', values='Speed')
         #Add a column indicating time of day between 0 and 1
