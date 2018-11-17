@@ -29,7 +29,7 @@ def parse_data(files):
     df['Speed'] = (df['Speed'] - df['Speed'].mean())/df['Speed'].std()
     
     
-    df_5min = df.groupby([pd.Grouper(freq='5Min'),'wayId'])['Speed'].mean().reset_index(name='mean')
+    df_5min = df.groupby([pd.Grouper(freq='10Min'),'wayId'])['Speed'].mean().reset_index(name='mean')
 
     #Make column with minutes and hours
     df_5min['hour'] = df_5min.Time.apply(lambda x: x.hour)
