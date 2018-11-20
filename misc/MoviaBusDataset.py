@@ -159,12 +159,11 @@ class MoviaBusDataset(Dataset):
         if self.__sequence_target:
             target = torch.tensor(self.dataframes[dataframe_idx] [idx : idx_target + 1].values, dtype=torch.float)[:,0:self.num_roads]    
             #Tensors can only handle numbers, so convert datetime to seconds
-            time = torch.tensor(self.dataframes[dataframe_idx].index[idx:idx_target + 1].strftime("%s").values.astype(int))
+            time = torch.tensor(self.dataframes[dataframe_idx].index[idx:idx_target + 1].strftime("%M").values.astype(int))
         else:
             target = torch.tensor(self.dataframes[dataframe_idx].iloc[idx_target].values, dtype=torch.float)[0:self.num_roads]
-            time = torch.tensor(self.dataframes[dataframe_idx].index[idx_target].strftime("%s").values.astype(int))
+            time = torch.tensor(self.dataframes[dataframe_idx].index[idx_target].strftime("%M").values.astype(int))
             
-        
 
         return {'data':data, 'target':target, 'time':time}
 
