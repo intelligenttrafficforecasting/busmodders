@@ -1,5 +1,3 @@
-
-
 import torch
 from BaseNetwork import BaseNetwork
 import torch.nn.functional as F
@@ -12,13 +10,14 @@ from BaseNetwork import BaseNetwork
 from torch.optim import Adam
 import sys
 sys.path.append("../DCRNN")
+sys.path.append("../misc")
 from lib.utils import calculate_normalized_laplacian
 from misc.data_loader import load_network, adjacency_matrix
 import torch.nn as nn
 import math
 from torch.nn.parameter import Parameter
 from torch.nn.modules import Module
-
+from MoviaBusDataset import MoviaBusDataset
 class ConvolutionLayer(Module):
     def __init__(self,laplacian,n_signals,n_out):
         super(ConvolutionLayer,self).__init__()
@@ -39,7 +38,7 @@ class CNN(BaseNetwork):
     def __init__(self, previous_timesteps, num_hidden):
     #def __init__(self, num_hidden):
         super(CNN,self).__init__()
-        self.road_network = load_network()
+        self.road_network = load_network(MoviaBusDataset.hack_filters)
         self.adj_mat = adjacency_matrix(self.road_network)
         #first order approx
         self.n_nodes = self.adj_mat.shape[0]
@@ -131,7 +130,7 @@ class GCN(BaseNetwork):
         self.dropout = dropout
         
         # Define laplacian to first order approximation
-        self.road_network = load_network()
+        self.road_network = load_network(MoviaBusDataset.hack_filters)
         self.adj_mat = adjacency_matrix(self.road_network)
         self.n_nodes = self.adj_mat.shape[0]
         sparse_mat = calculate_normalized_laplacian(self.adj_mat + torch.eye(self.n_nodes))
