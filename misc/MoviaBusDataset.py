@@ -73,6 +73,11 @@ class MoviaBusDataset(Dataset):
         
         #Remove busses at stopping points
         data_filter &= df['StopPointRef'].isnull()
+        
+        #Hack to fix missing values
+        data_filter &= df['LinkRef']!='162089324:1649384672:1649384611'
+        data_filter &= df['LinkRef']!='428851676:4279694303:2599647200'
+        
         df = df[data_filter].copy()
         
         #Convert time column to datetime
@@ -85,7 +90,7 @@ class MoviaBusDataset(Dataset):
         df = df.set_index('Time')
 
         #Remove data during the night for now
-        df = df.between_time('06:00','22:00')
+        df = df.between_time('06:00','21:55')
         
         #Aggregate data for each road into 5min bins.
         df_5min = df.groupby([pd.Grouper(freq='{}Min'.format(self.__agg_time)),'LinkRef'])['Speed'].mean().reset_index(name='Speed')
@@ -164,7 +169,7 @@ class MoviaBusDataset(Dataset):
             target = torch.tensor(self.dataframes[dataframe_idx].iloc[idx_target].values, dtype=torch.float)[0:self.num_roads]
             time = torch.tensor(self.dataframes[dataframe_idx].index[idx_target].strftime("%s").values.astype(int))
             
-        
+
 
         return {'data':data, 'target':target, 'time':time}
 
