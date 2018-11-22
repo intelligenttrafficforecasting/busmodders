@@ -18,6 +18,8 @@ class BaseNetwork(Module):
         self.max_timestep = 0
         self.num_roads = 0
        
+        if has_cuda():
+           self.cuda()
 
     def train_network(self,\
             train, 
@@ -63,6 +65,7 @@ class BaseNetwork(Module):
         train_dataloader = DataLoader(train, batch_size=batch_size, shuffle=False)
         test_dataloader = DataLoader(test, batch_size=batch_size, shuffle=False)
 
+        #Enable CUDA
         if has_cuda():
            self.cuda()
 
