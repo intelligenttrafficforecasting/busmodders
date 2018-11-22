@@ -3,6 +3,7 @@ from torch.optim import Adam, lr_scheduler
 from torch.utils.data import DataLoader
 import torch
 import numpy as np
+from torch.cuda import is_available as has_cuda
 
 class BaseNetwork(Module):
     """
@@ -17,6 +18,8 @@ class BaseNetwork(Module):
         self.max_timestep = 0
         self.num_roads = 0
        
+        if has_cuda():
+           self.cuda()
 
     def train_network(self,\
             train, 
@@ -62,6 +65,9 @@ class BaseNetwork(Module):
         train_dataloader = DataLoader(train, batch_size=batch_size, shuffle=False)
         test_dataloader = DataLoader(test, batch_size=batch_size, shuffle=False)
 
+        #Enable CUDA
+        if has_cuda():
+           self.cuda()
 
         self.train()
         for epoch in range(num_epochs):
@@ -110,7 +116,10 @@ class BaseNetwork(Module):
         Args:
             timestep (int): How many timesteps into the future you want to calculate the error for
         """
-
+        device = torch.device('cpu')
+        if has_cuda():
+           device = torch.device('cuda')
+        
         test_DL = DataLoader(self.test_data, batch_size=len(self.test_data), shuffle=False)
 
         self.eval()
@@ -121,8 +130,8 @@ class BaseNetwork(Module):
                 
             #If input is normalized, we need to denormalize it
             if self.test_data.std is not None:
-                output = output*torch.tensor(self.test_data.std) + torch.tensor(self.test_data.mean)
-                target = target*torch.tensor(self.test_data.std) + torch.tensor(self.test_data.mean)
+                output = output*torch.tensor(self.test_data.std, device=device) + torch.tensor(self.test_data.mean, device=device)
+                target = target*torch.tensor(self.test_data.std, device=device) + torch.tensor(self.test_data.mean, device=device)
             
             loss = self.criterion(output[:,timestep-1,:],target[:,timestep-1,:])
             return loss.item()
@@ -141,6 +150,10 @@ class BaseNetwork(Module):
 
         test_DL = DataLoader(self.test_data, batch_size=len(self.test_data), shuffle=False)
 
+        device = torch.device('cpu')
+        if has_cuda():
+           device = torch.device('cuda')
+        
         self.eval()
         for _, batch in enumerate(test_DL):
             
@@ -149,14 +162,13 @@ class BaseNetwork(Module):
             time = batch['time']
             #If input is normalized, we need to denormalize it
             if self.test_data.std is not None:
-                output = output*torch.tensor(self.test_data.std) + torch.tensor(self.test_data.mean)
-                target = target*torch.tensor(self.test_data.std) + torch.tensor(self.test_data.mean)
-            
+                output = output*torch.tensor(self.test_data.std, device=device) + torch.tensor(self.test_data.mean, device=device)
+                target = target*torch.tensor(self.test_data.std, device=device) + torch.tensor(self.test_data.mean, device=device)
         #time is in seconds, so create a function that can convert it into datetimes again
         seconds_to_datetime = np.vectorize(datetime.fromtimestamp)
         time = seconds_to_datetime(time)
         
-        plt.plot(time[:,timesteps-1],output[:,timesteps-1,road].detach().numpy(), label='Prediction')
-        plt.plot(time[:,timesteps-1],target[:,timesteps-1,road].detach().numpy(), label='Truth')
+        plt.plot(time[:,timesteps-1],output[:,timesteps-1,road].detach().cpu().numpy(), label='Prediction')
+        plt.plot(time[:,timesteps-1],target[:,timesteps-1,road].detach().cpu().numpy(), label='Truth')
         plt.legend()
         plt.show()
