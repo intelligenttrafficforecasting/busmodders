@@ -1,16 +1,12 @@
 
 
-#from torch.autograd import Variable
-#from torch.nn.parameter import Parameter
+import torch
 from BaseNetwork import BaseNetwork
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.nn.init as init
 
 from torch.nn.modules import Module
-
-#from torch.nn import Linear, Conv1d, BatchNorm1d, MaxPool1d, Dropout
-#from torch.nn.functional import relu, elu, relu6, sigmoid, tanh, softmax
 from torch.nn import Module, Linear, ReLU, Sequential
 from BaseNetwork import BaseNetwork
 from torch.optim import Adam
@@ -18,11 +14,11 @@ import sys
 sys.path.append("../DCRNN")
 from lib.utils import calculate_normalized_laplacian
 from misc.data_loader import load_network, adjacency_matrix
+import torch.nn as nn
+import math
+from torch.nn.parameter import Parameter
+from torch.nn.modules import Module
 
-class CNN(BusmodderNet):
-
-    def __init__(self):
-        super(CNN, self).__init__()
 class ConvolutionLayer(Module):
     def __init__(self,laplacian,n_signals,n_out):
         super(ConvolutionLayer,self).__init__()
@@ -82,16 +78,14 @@ class CNN(BaseNetwork):
             x = x[:,:,1:]
             #unsqueeze output so its size is [batch_size, num_roads, timesteps]
             y = y.unsqueeze(2)
+            #append the new prediction to the input
+            x = torch.cat((x,y),dim=2)
+        return torch.stack(predictions,1)
+
 class GraphConvolution(Module):
     """
     Simple GCN layer, similar to https://arxiv.org/abs/1609.02907
     """
-
-            #append the new prediction to the input
-            x = torch.cat((x,y),dim=2)
-
-
-        return torch.stack(predictions,1)
 
 
 
