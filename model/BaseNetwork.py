@@ -3,6 +3,7 @@ from torch.optim import Adam, lr_scheduler
 from torch.utils.data import DataLoader
 import torch
 import numpy as np
+from torch.cuda import is_available as has_cuda
 
 class BaseNetwork(Module):
     """
@@ -17,6 +18,8 @@ class BaseNetwork(Module):
         self.max_timestep = 0
         self.num_roads = 0
        
+        if has_cuda():
+           self.cuda()
 
     def train_network(self,\
             train, 

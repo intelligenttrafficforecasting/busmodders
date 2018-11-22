@@ -4,6 +4,7 @@ import pandas as pd
 import glob
 import numpy as np
 from datetime import datetime
+from torch.cuda import is_available as has_cuda
 
 class MoviaBusDataset(Dataset):
     """Dataset for Movia Bus data"""
@@ -47,7 +48,7 @@ class MoviaBusDataset(Dataset):
         self.__timeofday = timeofday
         self.__sequence_target = sequence_target
         self.__agg_time = agg_time
-
+        
         #find all bus data in the given directory
         files = sorted(glob.glob('{}/*/vehicle-position-matched-online.csv'.format(root_dir)))
 
@@ -150,6 +151,12 @@ class MoviaBusDataset(Dataset):
 
     def __getitem__(self, idx):
         """Used for pytorch DataSet, to find the entry for a given index"""
+
+        #Enable CUDA if available
+        device = torch.device('cpu')
+        if has_cuda():
+            device = torch.device('cuda')
+
         #Calculate which dataframe to use
         dataframe_idx = idx // self.__data_per_dataframe
 
@@ -159,16 +166,16 @@ class MoviaBusDataset(Dataset):
         idx_target = idx + self.__max_future_time_steps - 1
 
         #Get the data for idx and previous time steps
-        data = torch.tensor(self.dataframes[dataframe_idx] [idx - self.__prev_timesteps - 1 : idx ].values, dtype=torch.float)
+        data = torch.tensor(self.dataframes[dataframe_idx] [idx - self.__prev_timesteps - 1 : idx ].values, dtype=torch.float, device=device)
         
         
         if self.__sequence_target:
-            target = torch.tensor(self.dataframes[dataframe_idx] [idx : idx_target + 1].values, dtype=torch.float)[:,0:self.num_roads]    
+            target = torch.tensor(self.dataframes[dataframe_idx] [idx : idx_target + 1].values, dtype=torch.float, device=device)[:,0:self.num_roads]    
             #Tensors can only handle numbers, so convert datetime to seconds
-            time = torch.tensor((self.dataframes[dataframe_idx].index[idx:idx_target + 1] - datetime(1970, 1, 1)).total_seconds())
+            time = torch.tensor((self.dataframes[dataframe_idx].index[idx:idx_target + 1] - datetime(1970, 1, 1)).total_seconds(), device=device)
         else:
-            target = torch.tensor(self.dataframes[dataframe_idx].iloc[idx_target].values, dtype=torch.float)[0:self.num_roads]
-            time = torch.tensor((self.dataframes[dataframe_idx].index[idx_target] - datetime(1970, 1, 1)).total_seconds())
+            target = torch.tensor(self.dataframes[dataframe_idx].iloc[idx_target].values, dtype=torch.float, device=device)[0:self.num_roads]
+            time = torch.tensor((self.dataframes[dataframe_idx].index[idx_target] - datetime(1970, 1, 1)).total_seconds(), device=device)
             
 
 
