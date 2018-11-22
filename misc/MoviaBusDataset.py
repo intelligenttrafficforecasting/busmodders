@@ -3,6 +3,7 @@ from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import glob
 import numpy as np
+from datetime import datetime
 
 class MoviaBusDataset(Dataset):
     """Dataset for Movia Bus data"""
@@ -48,7 +49,7 @@ class MoviaBusDataset(Dataset):
         self.__agg_time = agg_time
 
         #find all bus data in the given directory
-        files = glob.glob('{}/*/vehicle-position-matched-online.csv'.format(root_dir))
+        files = sorted(glob.glob('{}/*/vehicle-position-matched-online.csv'.format(root_dir)))
 
         for file in files:
             if verbose:
@@ -90,7 +91,7 @@ class MoviaBusDataset(Dataset):
         df = df.set_index('Time')
 
         #Remove data during the night for now
-        df = df.between_time('06:00','21:55')
+        df = df.between_time('06:00','21:59:59')
         
         #Aggregate data for each road into 5min bins.
         df_5min = df.groupby([pd.Grouper(freq='{}Min'.format(self.__agg_time)),'LinkRef'])['Speed'].mean().reset_index(name='Speed')
@@ -103,7 +104,7 @@ class MoviaBusDataset(Dataset):
 
         #Interpolate missing values
         if self.__interpolation:
-            df_5min.interpolate(limit=15, limit_direction='both',inplace=True)   
+            df_5min.interpolate(limit=25, limit_direction='both',inplace=True)   
 
         return df_5min
 
@@ -164,10 +165,10 @@ class MoviaBusDataset(Dataset):
         if self.__sequence_target:
             target = torch.tensor(self.dataframes[dataframe_idx] [idx : idx_target + 1].values, dtype=torch.float)[:,0:self.num_roads]    
             #Tensors can only handle numbers, so convert datetime to seconds
-            time = torch.tensor(self.dataframes[dataframe_idx].index[idx:idx_target + 1].strftime("%M").values.astype(int))
+            time = torch.tensor((self.dataframes[dataframe_idx].index[idx:idx_target + 1] - datetime(1970, 1, 1)).total_seconds())
         else:
             target = torch.tensor(self.dataframes[dataframe_idx].iloc[idx_target].values, dtype=torch.float)[0:self.num_roads]
-            time = torch.tensor(self.dataframes[dataframe_idx].index[idx_target].strftime("%M").values.astype(int))
+            time = torch.tensor((self.dataframes[dataframe_idx].index[idx_target] - datetime(1970, 1, 1)).total_seconds())
             
 
 
