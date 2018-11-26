@@ -69,8 +69,9 @@ class BaseNetwork(Module):
         if has_cuda():
            self.cuda()
 
-        self.train()
+        
         for epoch in range(num_epochs):
+            self.train()
             train_loss = []
             test_loss = []
             #Train on the training dataset
