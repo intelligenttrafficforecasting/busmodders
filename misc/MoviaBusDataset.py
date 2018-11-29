@@ -78,7 +78,7 @@ class MoviaBusDataset(Dataset):
         data_filter &= df['StopPointRef'].isnull()
         
         #Hack to fix missing values
-        for link in hack_filters:
+        for link in MoviaBusDataset.hack_filters:
             data_filter &= df['LinkRef']!=link
         
         df = df[data_filter].copy()
