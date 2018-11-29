@@ -22,7 +22,8 @@ class MoviaBusDataset(Dataset):
                 max_future_time_steps = 1, 
                 timeofday = False, 
                 sequence_target = True, 
-                agg_time = 5 
+                agg_time = 5 ,
+                remove_trend = True
                 ):
         """
         
@@ -37,6 +38,7 @@ class MoviaBusDataset(Dataset):
             timeofday (Boolean): Flag if you want the data to include the time of day as a continous value between 0 and 1
             sequence_target (Boolean): Flag if you want the target data to be given as a sequence of all timesteps up to max_future_time_steps
             agg_time (Int): number of minutes to aggregate the meassurements over
+            remove_trend (Boolean): Subtract the historical average from the data
         """
         
         self.dataframes = []
@@ -49,6 +51,7 @@ class MoviaBusDataset(Dataset):
         self.__timeofday = timeofday
         self.__sequence_target = sequence_target
         self.__agg_time = agg_time
+        self.__remove_trend = remove_trend
         
         #find all bus data in the given directory
         files = sorted(glob.glob('{}/*/vehicle-position-matched-online.csv'.format(root_dir)))
@@ -64,6 +67,53 @@ class MoviaBusDataset(Dataset):
         
         if normalize:
             self.normalize()
+
+        if remove_trend:
+            self.remove_trend()
+
+    def remove_trend(self):
+
+        #Load the data
+        if self.__timeofday:
+            df = pd.concat((dataframe.drop('TimeOfDay', axis=1) for dataframe in self.dataframes))
+        else:
+            df = pd.concat((dataframe for dataframe in self.dataframes))
+        #Convert columns to rows
+        df = df.unstack().reset_index().rename(columns={0:"Speed"})
+
+        #If need the time of day value, so add it
+        df['TimeOfDay'] = (df.Time.dt.minute + df.Time.dt.hour*60)/(22*60)
+            
+        #Calculate the historical average
+        historical_average = df.groupby(['TimeOfDay','LinkRef']).mean()
+        self._historical_average = historical_average
+
+        #Update the data in each dataframes
+        for i in range(len(self.dataframes)):
+            #Get dataframe
+            if self.__timeofday:
+                df = self.dataframes[i].drop('TimeOfDay',axis=1)
+            else:
+                df = self.dataframes[i]
+            #Convert columns to rows
+            df = df.unstack().reset_index().rename(columns={0:"Speed"})
+            #Add time of day in case we don't have it
+            
+            df['TimeOfDay'] = (df.Time.dt.minute + df.Time.dt.hour*60)/(22*60)
+            
+            #Merge data with historical average
+            df = pd.merge(df, historical_average,on=['LinkRef','TimeOfDay'])
+            df.columns=['LinkRef','Time','Speed','TimeOfDay','historical_average']
+            #Update the speed
+            df['Speed'] = df['Speed']-df['historical_average']
+            #Convert to pivot again
+            df = df.pivot(index='Time',columns='LinkRef',values='Speed')
+
+            #Time of day is missing now, so add it we want to include it
+            if self.__timeofday:
+                df['TimeOfDay'] = (df.index.minute + df.index.hour*60)/(22*60)
+            
+            self.dataframes[i] = df
 
 
     def __parse_file(self, file):
