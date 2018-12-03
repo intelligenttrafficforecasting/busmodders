@@ -82,6 +82,8 @@ class CNN(BaseNetwork):
             ReLU(),
             ConvolutionLayer(self.laplacian, self.n_roads,1),
             #ReLU(),
+            #ConvolutionLayer(self.laplacian, self.n_roads,1),
+            #ReLU(),
             #ConvolutionLayer(self.laplacian,num_hidden, 1),
             #Linear(num_hidden*(previous_timesteps+1), self.n_nodes),
             #Linear(num_hidden * (previous_timesteps+1), 1),
