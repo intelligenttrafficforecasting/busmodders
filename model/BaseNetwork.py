@@ -28,8 +28,7 @@ class BaseNetwork(Module):
             num_epochs = 100, 
             optimizer_fun = lambda param: Adam(param), 
             scheduler_fun = None, 
-            criterion = L1Loss(),
-            shuffle=False
+            criterion = L1Loss() 
             ):
 
         """
@@ -63,16 +62,15 @@ class BaseNetwork(Module):
         self.max_timestep, self.num_roads = train[0]['target'].size()
         
         #Create the data loaders
-        train_dataloader = DataLoader(train, batch_size=batch_size, shuffle=shuffle)
-        test_dataloader = DataLoader(test, batch_size=batch_size, shuffle=shuffle)
+        train_dataloader = DataLoader(train, batch_size=batch_size, shuffle=False)
+        test_dataloader = DataLoader(test, batch_size=batch_size, shuffle=False)
 
         #Enable CUDA
         if has_cuda():
            self.cuda()
 
-        
+        self.train()
         for epoch in range(num_epochs):
-            self.train()
             train_loss = []
             test_loss = []
             #Train on the training dataset
@@ -111,7 +109,7 @@ class BaseNetwork(Module):
 
             
 
-    def get_MAE_score(self, timestep = 1):
+    def get_MAE_score(self, timestep = 1,individual_roads=False):
         """
         Returns the MeanAbsoluteError on the test dataset
 
@@ -134,9 +132,17 @@ class BaseNetwork(Module):
             if self.test_data.std is not None:
                 output = output*torch.tensor(self.test_data.std, device=device) + torch.tensor(self.test_data.mean, device=device)
                 target = target*torch.tensor(self.test_data.std, device=device) + torch.tensor(self.test_data.mean, device=device)
-            
-            loss = self.criterion(output[:,timestep-1,:],target[:,timestep-1,:])
-            return loss.item()
+            if individual_roads:
+                o = output[:,timestep-1,:]
+                t = target[:,timestep-1,:]
+                n_roads = o.shape[1]
+                loss = np.empty(n_roads)
+                for i in range(n_roads):
+                    loss[i] = self.criterion(output[:,timestep-1,i],target[:,timestep-1,i]).item()
+                return loss
+            else:
+                loss = self.criterion(output[:,timestep-1,:],target[:,timestep-1,:])
+                return loss.item()
 
     def visualize_road(self, timesteps=1, road=1):
         """

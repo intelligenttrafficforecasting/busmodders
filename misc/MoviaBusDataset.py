@@ -22,7 +22,7 @@ class MoviaBusDataset(Dataset):
                 max_future_time_steps = 1, 
                 timeofday = False, 
                 sequence_target = True, 
-                agg_time = 10 ,
+                agg_time = 5 ,
                 remove_trend = False
                 ):
         """
@@ -71,21 +71,22 @@ class MoviaBusDataset(Dataset):
         if remove_trend:
             self.remove_trend()
 
-    def remove_trend(self):
+    def remove_trend(self,historical_average = None):
+        if historical_average is None:
+            #Load the data
+            if self.__timeofday:
+                df = pd.concat((dataframe.drop('TimeOfDay', axis=1) for dataframe in self.dataframes))
+            else:
+                df = pd.concat((dataframe for dataframe in self.dataframes))
+            #Convert columns to rows
+            df = df.unstack().reset_index().rename(columns={0:"Speed"})
 
-        #Load the data
-        if self.__timeofday:
-            df = pd.concat((dataframe.drop('TimeOfDay', axis=1) for dataframe in self.dataframes))
-        else:
-            df = pd.concat((dataframe for dataframe in self.dataframes))
-        #Convert columns to rows
-        df = df.unstack().reset_index().rename(columns={0:"Speed"})
-
-        #If need the time of day value, so add it
-        df['TimeOfDay'] = (df.Time.dt.minute + df.Time.dt.hour*60)/(22*60)
-            
-        #Calculate the historical average
-        historical_average = df.groupby(['TimeOfDay','LinkRef']).mean()
+            #If need the time of day value, so add it
+            df['TimeOfDay'] = (df.Time.dt.minute + df.Time.dt.hour*60)/(22*60)
+                
+            #Calculate the historical average
+            historical_average = df.groupby(['TimeOfDay','LinkRef']).mean()
+        
         self._historical_average = historical_average
 
         #Update the data in each dataframes
@@ -128,7 +129,7 @@ class MoviaBusDataset(Dataset):
         data_filter &= df['StopPointRef'].isnull()
         
         #Hack to fix missing values
-        for link in self.hack_filters:
+        for link in MoviaBusDataset.hack_filters:
             data_filter &= df['LinkRef']!=link
         
         df = df[data_filter].copy()

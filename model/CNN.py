@@ -19,39 +19,74 @@ from torch.nn.parameter import Parameter
 from torch.nn.modules import Module
 from MoviaBusDataset import MoviaBusDataset
 class ConvolutionLayer(Module):
-    def __init__(self,laplacian,n_signals,n_out):
+    def __init__(self, laplacian, n_out, timesteps, bias=None):
         super(ConvolutionLayer,self).__init__()
-        self.n_nodes = laplacian.shape[0]
+        self.n_roads = laplacian.shape[0]
         self.laplacian = laplacian
-        self.l1  = Linear(n_signals * self.n_nodes, n_out * self.n_nodes,bias = False)
+        #self.bias = bias
+        #self.l1  = Linear(n_in * self.n_nodes, n_out * self.n_nodes,bias = False)
+        #self.weight = Parameter(torch.cuda.FloatTensor(n_in,self.n_nodes, n_out))
+        #self.weight = Parameter(torch.cuda.FloatTensor(n_out,1,self.n_nodes, n_in))
+        self.theta = Parameter(torch.cuda.FloatTensor(n_out, 1, self.n_roads))
+        self.omega = Parameter(torch.cuda.FloatTensor(timesteps))
+        if bias:
+            raise "Not implimented"
+            self.bias = Parameter(torch.cuda.FloatTensor(self.n_roads,n_out))
+        else:
+            self.register_parameter('bias', None)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        stdv = 1. / math.sqrt(self.theta.size(1))
+        self.theta.data.uniform_(-stdv, stdv)
+        stdv_omega = 1. / math.sqrt(self.omega.size(0))
+        self.omega.data.uniform_(-stdv_omega, stdv_omega)
+        if self.bias is not None:
+            raise "Not implimented"
+            self.bias.data.uniform_(-stdv, stdv)
+
     
     def forward(self,x):
         y = self.laplacian.matmul(x)
-        shape = y.shape
-        y = y.reshape(shape[0],shape[1]*shape[2])
-        y = self.l1(y)
-        y = y.reshape(shape)
+        y = y.unsqueeze(1)
+        #print(x.shape)
+        #print("y " + str(y.shape))
+        #y = y.reshape(shape[0],shape[1]*shape[2])
+        #print(y.shape)
+        #print("theta " +str(self.theta.shape))
+        #y = self.l1(y)
+        y = self.theta.matmul(y)
+        #print("y " + str(y.shape))
+        y = y.matmul(self.omega)
+        #print("y " + str(y.shape))
+        #y = y.reshape(shape)
+        #y = y.squeeze(2)
+        #print("y " + str(y.shape))
         return y
 
 
 class CNN(BaseNetwork):
-    def __init__(self, previous_timesteps, num_hidden):
-    #def __init__(self, num_hidden):
+    def __init__(self, previous_timesteps):
         super(CNN,self).__init__()
         self.road_network = load_network(MoviaBusDataset.hack_filters)
         self.adj_mat = adjacency_matrix(self.road_network)
         #first order approx
-        self.n_nodes = self.adj_mat.shape[0]
-        sparse_mat = calculate_normalized_laplacian(self.adj_mat + torch.eye(self.n_nodes))
-        self.laplacian = torch.tensor(sparse_mat.todense()).float()
-        #self.convl1 = ConvolutionLayer(self.laplacian,(previous_timesteps+1),1)
+        self.n_roads = self.adj_mat.shape[0]
+        sparse_mat = calculate_normalized_laplacian(self.adj_mat + torch.eye(self.n_roads))
+        self.laplacian = torch.cuda.FloatTensor(sparse_mat.todense()) if torch.cuda.is_available()  else torch.FloatTensor(sparse_mat.todense())#self.convl1 = ConvolutionLayer(self.laplacian,(previous_timesteps+1),1)
         self.relu = ReLU()
         self.CNN = Sequential(
-            ConvolutionLayer(self.laplacian,previous_timesteps+1, previous_timesteps+1),
+            ConvolutionLayer(self.laplacian, self.n_roads, previous_timesteps+1),
             ReLU(),
-            ConvolutionLayer(self.laplacian, previous_timesteps+1,previous_timesteps+1),
+            ConvolutionLayer(self.laplacian, self.n_roads,1),
             ReLU(),
-            Linear((previous_timesteps+1), 1),
+            ConvolutionLayer(self.laplacian, self.n_roads,1),
+            #ReLU(),
+            #ConvolutionLayer(self.laplacian, self.n_roads,1),
+            #ReLU(),
+            #ConvolutionLayer(self.laplacian,num_hidden, 1),
+            #Linear(num_hidden*(previous_timesteps+1), self.n_nodes),
+            #Linear(num_hidden * (previous_timesteps+1), 1),
         )
         
     
@@ -76,6 +111,7 @@ class CNN(BaseNetwork):
             #remove oldest timestep
             x = x[:,:,1:]
             #unsqueeze output so its size is [batch_size, num_roads, timesteps]
+            #print(y.shape)
             y = y.unsqueeze(2)
             #append the new prediction to the input
             x = torch.cat((x,y),dim=2)
@@ -134,8 +170,8 @@ class GCN(BaseNetwork):
         self.adj_mat = adjacency_matrix(self.road_network)
         self.n_nodes = self.adj_mat.shape[0]
         sparse_mat = calculate_normalized_laplacian(self.adj_mat + torch.eye(self.n_nodes))
-        self.laplacian = torch.tensor(sparse_mat.todense()).float()
-        
+        #self.laplacian = torch.tensor(sparse_mat.todense()).cuda()
+        self.laplacian = torch.cuda.FloatTensor(sparse_mat.todense()) if torch.cuda.is_available()  else torch.FloatTensor(sparse_mat.todense())
     def forward(self, x):
          #Transpose input, such that the previous time steps are the last dimension
         x = x.transpose(2,1)
