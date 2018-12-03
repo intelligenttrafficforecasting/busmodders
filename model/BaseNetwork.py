@@ -28,8 +28,7 @@ class BaseNetwork(Module):
             num_epochs = 100, 
             optimizer_fun = lambda param: Adam(param), 
             scheduler_fun = None, 
-            criterion = L1Loss(),
-            shuffle=False
+            criterion = L1Loss() 
             ):
 
         """
@@ -63,16 +62,15 @@ class BaseNetwork(Module):
         self.max_timestep, self.num_roads = train[0]['target'].size()
         
         #Create the data loaders
-        train_dataloader = DataLoader(train, batch_size=batch_size, shuffle=shuffle)
-        test_dataloader = DataLoader(test, batch_size=batch_size, shuffle=shuffle)
+        train_dataloader = DataLoader(train, batch_size=batch_size, shuffle=False)
+        test_dataloader = DataLoader(test, batch_size=batch_size, shuffle=False)
 
         #Enable CUDA
         if has_cuda():
            self.cuda()
 
-        
+        self.train()
         for epoch in range(num_epochs):
-            self.train()
             train_loss = []
             test_loss = []
             #Train on the training dataset
