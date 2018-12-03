@@ -22,8 +22,8 @@ class MoviaBusDataset(Dataset):
                 max_future_time_steps = 1, 
                 timeofday = False, 
                 sequence_target = True, 
-                agg_time = 5 ,
-                remove_trend = True
+                agg_time = 10 ,
+                remove_trend = False
                 ):
         """
         
