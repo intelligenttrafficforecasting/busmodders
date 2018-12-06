@@ -111,7 +111,7 @@ class BaseNetwork(Module):
 
             
 
-    def get_MAE_score(self, timestep = 1):
+    def get_MAE_score(self, timestep = 1,individual_roads=False):
         """
         Returns the MeanAbsoluteError on the test dataset
 
@@ -134,9 +134,17 @@ class BaseNetwork(Module):
             if self.test_data.std is not None:
                 output = output*torch.tensor(self.test_data.std, device=device) + torch.tensor(self.test_data.mean, device=device)
                 target = target*torch.tensor(self.test_data.std, device=device) + torch.tensor(self.test_data.mean, device=device)
-            
-            loss = self.criterion(output[:,timestep-1,:],target[:,timestep-1,:])
-            return loss.item()
+            if individual_roads:
+                o = output[:,timestep-1,:]
+                t = target[:,timestep-1,:]
+                n_roads = o.shape[1]
+                loss = np.empty(n_roads)
+                for i in range(n_roads):
+                    loss[i] = self.criterion(output[:,timestep-1,i],target[:,timestep-1,i]).item()
+                return loss
+            else:
+                loss = self.criterion(output[:,timestep-1,:],target[:,timestep-1,:])
+                return loss.item()
 
     def visualize_road(self, timesteps=1, road=1):
         """
