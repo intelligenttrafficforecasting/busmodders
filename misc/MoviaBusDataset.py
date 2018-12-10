@@ -144,7 +144,7 @@ class MoviaBusDataset(Dataset):
         df = df.set_index('Time')
 
         #Remove data during the night for now
-        df = df.between_time('06:00','21:59:59')
+        df = df.between_time('05:00','21:59:59')
         
         #Aggregate data for each road into 5min bins.
         df_5min = df.groupby([pd.Grouper(freq='{}Min'.format(self.__agg_time)),'LinkRef'])['Speed'].mean().reset_index(name='Speed')
