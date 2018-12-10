@@ -215,16 +215,16 @@ class MoviaBusDataset(Dataset):
         #Calculate the index within the dataframe. The +1 is due to the fact that we want to index a slice, where the last element is disregarded
         idx = (idx % self.__data_per_dataframe) + self.__prev_timesteps 
         #Add the additional prediction steps, and remove the 1 since we now want a real index and not a slice
-        idx_target = idx + self.__max_future_time_steps 
+        idx_target = idx + self.__max_future_time_steps + 1
 
         #Get the data for idx and previous time steps
         data = torch.tensor(self.dataframes[dataframe_idx] [idx - self.__prev_timesteps  : idx + 1 ].values, dtype=torch.float, device=device)
         
         
         if self.__sequence_target:
-            target = torch.tensor(self.dataframes[dataframe_idx] [idx : idx_target ].values, dtype=torch.float, device=device)[:,0:self.num_roads]    
+            target = torch.tensor(self.dataframes[dataframe_idx] [idx + 1: idx_target ].values, dtype=torch.float, device=device)[:,0:self.num_roads]    
             #Tensors can only handle numbers, so convert datetime to seconds
-            time = torch.tensor((self.dataframes[dataframe_idx].index[idx:idx_target ] - datetime(1970, 1, 1)).total_seconds(), device=device)
+            time = torch.tensor((self.dataframes[dataframe_idx].index[idx + 1:idx_target ] - datetime(1970, 1, 1)).total_seconds(), device=device)
         else:
             target = torch.tensor(self.dataframes[dataframe_idx].iloc[idx_target - 1].values, dtype=torch.float, device=device)[0:self.num_roads]
             time = torch.tensor((self.dataframes[dataframe_idx].index[idx_target - 1] - datetime(1970, 1, 1)).total_seconds(), device=device)
