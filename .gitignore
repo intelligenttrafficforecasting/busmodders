@@ -105,6 +105,7 @@ venv.bak/
 
 data/test/*
 data/train/*
+data/validation/*
 *.geojson
 
 data_eigil

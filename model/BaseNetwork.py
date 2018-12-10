@@ -23,7 +23,7 @@ class BaseNetwork(Module):
 
     def train_network(self,\
             train, 
-            test, 
+            validation,
             batch_size = 50, 
             num_epochs = 100, 
             optimizer_fun = lambda param: Adam(param), 
@@ -37,7 +37,7 @@ class BaseNetwork(Module):
 
         Args:
             train (dataset): Training dataset. Should be a torch dataset
-            test (dataset): Test dataset. Should be a torch dataset
+            test (dataset): validation dataset. Should be a torch dataset
             batch_size (int): The batch_size used for training.
             num_epochs (int): Number of epochs to run the training for
             optimizer_fun (function): The function used to contruct the optimizer. 
@@ -47,7 +47,7 @@ class BaseNetwork(Module):
         """    
 
         #Save some of the informations in the class for later
-        self.test_data = test
+        self.validation_data = validation
         self.train_data = train
         self.criterion = criterion
 
@@ -64,7 +64,7 @@ class BaseNetwork(Module):
         
         #Create the data loaders
         train_dataloader = DataLoader(train, batch_size=batch_size, shuffle=shuffle)
-        test_dataloader = DataLoader(test, batch_size=batch_size, shuffle=shuffle)
+        validation_dataloader = DataLoader(validation, batch_size=batch_size, shuffle=shuffle)
 
         #Enable CUDA
         if has_cuda():
@@ -74,7 +74,7 @@ class BaseNetwork(Module):
         for epoch in range(num_epochs):
             self.train()
             train_loss = []
-            test_loss = []
+            validation_loss = []
             #Train on the training dataset
             for _ , batch_train in enumerate(train_dataloader):
                 #Get the predictions and targets
@@ -94,24 +94,24 @@ class BaseNetwork(Module):
                 
                 train_loss.append(loss.item())
 
-            #Evaluate the results on the test set
+            #Evaluate the results on the validation set
             self.eval()
-            for _, batch_test in enumerate(test_dataloader):
+            for _, batch_validation in enumerate(validation_dataloader):
 
-                output = self(batch_test['data'])
-                target = batch_test['target']
+                output = self(batch_validation['data'])
+                target = batch_validation['target']
                 loss = criterion(output, target)   
-                test_loss.append(loss.item())
+                validation_loss.append(loss.item())
 
             if self.scheduler is not None:
                     self.scheduler.step()
 
             if epoch % 2 == 0:
-                print("epoch = %2i  train loss = %0.3f   test loss = %0.3f   output_std = %0.3f" %(epoch, np.mean(train_loss), np.mean(test_loss) , output.std().item()))
+                print("epoch = %2i  train loss = %0.3f   validation loss = %0.3f   output_std = %0.3f" %(epoch, np.mean(train_loss), np.mean(validation_loss) , output.std().item()))
 
             
 
-    def get_MAE_score(self, timestep = 1,individual_roads=False):
+    def get_MAE_score(self, dataset, timestep = 1,individual_roads=False):
         """
         Returns the MeanAbsoluteError on the test dataset
 
@@ -122,18 +122,18 @@ class BaseNetwork(Module):
         if has_cuda():
            device = torch.device('cuda')
         
-        test_DL = DataLoader(self.test_data, batch_size=len(self.test_data), shuffle=False)
+        DL = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
 
         self.eval()
-        for _, batch in enumerate(test_DL):
+        for _, batch in enumerate(DL):
             
             output = self(batch['data'])
             target = batch['target']
                 
             #If input is normalized, we need to denormalize it
-            if self.test_data.std is not None:
-                output = output*torch.tensor(self.test_data.std, device=device) + torch.tensor(self.test_data.mean, device=device)
-                target = target*torch.tensor(self.test_data.std, device=device) + torch.tensor(self.test_data.mean, device=device)
+            if dataset.std is not None:
+                output = output*torch.tensor(dataset.std, device=device) + torch.tensor(dataset.mean, device=device)
+                target = target*torch.tensor(dataset.std, device=device) + torch.tensor(dataset.mean, device=device)
             if individual_roads:
                 o = output[:,timestep-1,:]
                 t = target[:,timestep-1,:]
@@ -146,7 +146,7 @@ class BaseNetwork(Module):
                 loss = self.criterion(output[:,timestep-1,:],target[:,timestep-1,:])
                 return loss.item()
 
-    def visualize_road(self, timesteps=1, road=1):
+    def visualize_road(self, dataset, timesteps=1, road=1):
         """
         Visualizes the predictions compared to the ground truth for a particular road
 
@@ -158,22 +158,22 @@ class BaseNetwork(Module):
         import matplotlib.pyplot as plt
         from datetime import datetime
 
-        test_DL = DataLoader(self.test_data, batch_size=len(self.test_data), shuffle=False)
+        DL = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
 
         device = torch.device('cpu')
         if has_cuda():
            device = torch.device('cuda')
         
         self.eval()
-        for _, batch in enumerate(test_DL):
+        for _, batch in enumerate(DL):
             
             output = self(batch['data'])
             target = batch['target']
             time = batch['time']
             #If input is normalized, we need to denormalize it
-            if self.test_data.std is not None:
-                output = output*torch.tensor(self.test_data.std, device=device) + torch.tensor(self.test_data.mean, device=device)
-                target = target*torch.tensor(self.test_data.std, device=device) + torch.tensor(self.test_data.mean, device=device)
+            if dataset.std is not None:
+                output = output*torch.tensor(dataset.std, device=device) + torch.tensor(dataset.mean, device=device)
+                target = target*torch.tensor(dataset.std, device=device) + torch.tensor(dataset.mean, device=device)
         #time is in seconds, so create a function that can convert it into datetimes again
         seconds_to_datetime = np.vectorize(datetime.fromtimestamp)
         time = seconds_to_datetime(time)
