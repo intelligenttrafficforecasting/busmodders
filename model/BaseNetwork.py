@@ -29,7 +29,8 @@ class BaseNetwork(Module):
             optimizer_fun = lambda param: Adam(param), 
             scheduler_fun = None, 
             criterion = L1Loss(),
-            shuffle=False
+            shuffle = False,
+            target_to_net = False
             ):
 
         """
@@ -43,6 +44,8 @@ class BaseNetwork(Module):
             optimizer_fun (function): The function used to contruct the optimizer. 
                                     Should take the parameters of the network as input
             criterion (function): The loss function that should be used
+            shuffle (Boolean): Flag to shuffle the data or not
+            target_to_net (Boolean): Give the targets as input to the forward function in the network. Used for curriculum learning
         
         """    
 
@@ -50,6 +53,7 @@ class BaseNetwork(Module):
         self.validation_data = validation
         self.train_data = train
         self.criterion = criterion
+        self.__target_to_net = target_to_net
 
         #initialize the optimizer
         self.optimizer = optimizer_fun(self.parameters())
@@ -78,7 +82,10 @@ class BaseNetwork(Module):
             #Train on the training dataset
             for _ , batch_train in enumerate(train_dataloader):
                 #Get the predictions and targets
-                output = self(batch_train['data'])
+                if self.__target_to_net:
+                    output = self(batch_train)
+                else:
+                    output = self(batch_train['data'])
                 target = batch_train['target']
 
                 #set the gradients to zero
@@ -97,8 +104,11 @@ class BaseNetwork(Module):
             #Evaluate the results on the validation set
             self.eval()
             for _, batch_validation in enumerate(validation_dataloader):
+                if self.__target_to_net:
+                    output = self(batch_validation)
+                else:
+                    output = self(batch_validation['data'])
 
-                output = self(batch_validation['data'])
                 target = batch_validation['target']
                 loss = criterion(output, target)   
                 validation_loss.append(loss.item())
@@ -126,8 +136,10 @@ class BaseNetwork(Module):
 
         self.eval()
         for _, batch in enumerate(DL):
-            
-            output = self(batch['data'])
+            if self.__target_to_net:
+                output = self(batch)
+            else:
+                output = self(batch['data'])
             target = batch['target']
                 
             #If input is normalized, we need to denormalize it
@@ -166,8 +178,10 @@ class BaseNetwork(Module):
         
         self.eval()
         for _, batch in enumerate(DL):
-            
-            output = self(batch['data'])
+            if self.__target_to_net:
+                output = self(batch)
+            else:
+                output = self(batch['data'])
             target = batch['target']
             time = batch['time']
             #If input is normalized, we need to denormalize it
