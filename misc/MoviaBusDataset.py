@@ -1,6 +1,8 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
+import geopandas as gpd
+from shapely.geometry import Point, LineString
 import glob
 import numpy as np
 from datetime import datetime
@@ -52,6 +54,9 @@ class MoviaBusDataset(Dataset):
         self.__sequence_target = sequence_target
         self.__agg_time = agg_time
         self.__remove_trend = remove_trend
+        self.__adjacency_matrix = None
+        
+        
         
         #find all bus data in the given directory
         files = sorted(glob.glob('{}/*/vehicle-position-matched-online.csv'.format(root_dir)))
@@ -70,6 +75,10 @@ class MoviaBusDataset(Dataset):
 
         if remove_trend:
             self.remove_trend()
+            
+    @property
+    def adjacency_matrix(self):
+        return self.__adjacency_matrix if self.__adjacency_matrix else self.__get_adjacency_matrix()
 
     def remove_trend(self,historical_average = None):
         if historical_average is None:
@@ -116,7 +125,39 @@ class MoviaBusDataset(Dataset):
             
             self.dataframes[i] = df
 
-
+    def __get_adjacency_matrix(self):
+        def load_network(delete_nodes=[]):
+            road_network = gpd.read_file('../data/road_network.geojson').drop('id', axis = 1)
+            forward = road_network.copy().drop(['Oneway', 'MaxSpeedBackward'], axis = 1).rename({'MaxSpeedForward': 'MaxSpeed'}, axis = 1)
+            forward['Heading'] = 'Forward'
+            backward = road_network[lambda x: x['Oneway'] == 0].copy().drop(['Oneway', 'MaxSpeedForward'], axis = 1).rename({'Source': 'Target', 'Target': 'Source', 'MaxSpeedBackward': 'MaxSpeed'}, axis = 1)
+            backward['geometry'] = backward['geometry'].apply(lambda x: LineString(reversed(x.coords)))
+            backward['Heading'] = 'Backward'
+            road_network = forward.append(
+                backward,
+                sort = True
+            )
+            road_network['LinkRef'] = road_network.apply(lambda r: '{WayId}:{Source}:{Target}'.format(**r), axis = 1)
+            road_network.set_index('LinkRef', inplace = True)
+            road_network = road_network[road_network.index.isin(self.section_of_interest)]
+            for id_ in delete_nodes:
+                del_node_target = road_network.loc[id_]['Target']
+                del_node_source = road_network.loc[id_]['Source']
+                road_network.loc[road_network['Source']==del_node_target,'Source'] = del_node_source
+                road_network.loc[road_network['Target']==del_node_source,'Target'] = del_node_target
+                road_network = road_network[road_network.index != id_]
+            return road_network
+    
+        def adjacency_matrix(road_network):
+            nodes = road_network[road_network.index.isin(self.section_of_interest)].index.values
+            adjacency_matrix_ = pd.DataFrame(index = nodes, columns = nodes)
+            for s in nodes:
+                adjacency_matrix_.loc[s,:] = (road_network.loc[s]['Target'] == road_network.loc[nodes]['Source']).astype(int)
+            return adjacency_matrix_.values
+        return adjacency_matrix(load_network(delete_nodes=self.hack_filters))
+    
+        
+        
     def __parse_file(self, file):
         df = pd.read_csv(file)
         #filter out sections of interest
