@@ -4,8 +4,18 @@ import pandas as pd
 import glob
 import numpy as np
 from datetime import datetime
-from torch.cuda import is_available as has_cuda
 
+def has_cuda():
+    """Hack to check if CUDA is available. This fallbacks to CPU if you have GPU, but it's too old"""
+    import warnings
+    try:
+        with warnings.catch_warnings(record=True):
+            warnings.filterwarnings('error')
+            torch.cuda._check_capability()
+            return True
+    except:
+        return False
+        
 class MoviaBusDataset(Dataset):
     """Dataset for Movia Bus data"""
 

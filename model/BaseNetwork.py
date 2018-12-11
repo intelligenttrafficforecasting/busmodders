@@ -3,8 +3,20 @@ from torch.optim import Adam, lr_scheduler
 from torch.utils.data import DataLoader
 import torch
 import numpy as np
-from torch.cuda import is_available as has_cuda
 
+
+def has_cuda():
+    """Hack to check if CUDA is available. This fallbacks to CPU if you have GPU, but it's too old"""
+    import warnings
+    try:
+        with warnings.catch_warnings(record=True):
+            warnings.filterwarnings('error')
+            torch.cuda._check_capability()
+            return True
+    except:
+        return False
+
+        
 class BaseNetwork(Module):
     """
     Base class for out networks. This contains shared methods like
