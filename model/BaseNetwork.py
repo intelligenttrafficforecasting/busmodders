@@ -16,19 +16,24 @@ def has_cuda():
     except:
         return False
 
-        
+
 class BaseNetwork(Module):
     """
     Base class for out networks. This contains shared methods like
         - train_network: Method used for training the network
         - get_MAE_score: Returns the MeanAbsoluteError on the test data
     """
-    def __init__(self):
+    def __init__(self, name = None):
         super().__init__()
 
         #initialize class variables for readibility
         self.max_timestep = 0
         self.num_roads = 0
+
+        if name is None:
+            self.__name = type(self).__name__
+        else:
+            self.__name = name
        
         if has_cuda():
            self.cuda()
@@ -86,7 +91,8 @@ class BaseNetwork(Module):
         if has_cuda():
            self.cuda()
 
-        
+        min_loss = float('inf')
+
         for epoch in range(num_epochs):
             self.train()
             train_loss = []
@@ -124,14 +130,22 @@ class BaseNetwork(Module):
                 target = batch_validation['target']
                 loss = criterion(output, target)   
                 validation_loss.append(loss.item())
-
+            
+            #Update learning rate scheduler if exists
             if self.scheduler is not None:
                     self.scheduler.step()
 
             if epoch % 2 == 0:
                 print("epoch = %2i  train loss = %0.3f   validation loss = %0.3f   output_std = %0.3f" %(epoch, np.mean(train_loss), np.mean(validation_loss) , output.std().item()))
+                #Save the best parameters
+                if np.mean(validation_loss) < min_loss:
+                    min_loss = np.mean(validation_loss)
+                    self.save()
 
-            
+                    
+
+        #Load the best parameters from training
+        self.load()
 
     def get_MAE_score(self, dataset, timestep = 1,individual_roads=False):
         """
@@ -208,3 +222,23 @@ class BaseNetwork(Module):
         plt.plot(time[:,timesteps-1],target[:,timesteps-1,road].detach().cpu().numpy(), label='Truth')
         plt.legend()
         plt.show()
+
+    def save(self, file_path = None):
+        "Save the parameters of the model"      
+        if file_path is None:
+            file_path = '{}.pt'.format(self.__name)
+
+        torch.save(self.state_dict(), file_path)
+        print("Model saved as {}".format(file_path))
+
+    def load(self, file_path = None):
+        "Load the parameters of the model from a checkpoint"
+        from os.path import exists
+
+        if file_path is None:
+            file_path = '{}.pt'.format(self.__name)
+
+        if exists(file_path):
+            self.load_state_dict(torch.load(file_path))
+        else:
+            raise FileNotFoundError("Couldn't load model since file {} doesn't exists".format(file_path))
