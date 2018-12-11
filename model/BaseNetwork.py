@@ -38,6 +38,8 @@ class BaseNetwork(Module):
         if has_cuda():
            self.cuda()
 
+        self.min_loss = float('inf')
+
     def train_network(self,\
             train, 
             validation,
@@ -91,7 +93,7 @@ class BaseNetwork(Module):
         if has_cuda():
            self.cuda()
 
-        min_loss = float('inf')
+        
 
         for epoch in range(num_epochs):
             self.train()
@@ -138,8 +140,8 @@ class BaseNetwork(Module):
             if epoch % 2 == 0:
                 print("epoch = %2i  train loss = %0.3f   validation loss = %0.3f   output_std = %0.3f" %(epoch, np.mean(train_loss), np.mean(validation_loss) , output.std().item()))
                 #Save the best parameters
-                if np.mean(validation_loss) < min_loss:
-                    min_loss = np.mean(validation_loss)
+                if np.mean(validation_loss) < self.min_loss:
+                    self.min_loss = np.mean(validation_loss)
                     self.save()
 
                     
