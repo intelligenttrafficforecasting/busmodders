@@ -3,6 +3,7 @@ from torch.optim import Adam, lr_scheduler
 from torch.utils.data import DataLoader
 import torch
 import numpy as np
+import pandas as pd
 
 
 def has_cuda():
@@ -87,7 +88,7 @@ class BaseNetwork(Module):
         
         #Create the data loaders
         train_dataloader = DataLoader(train, batch_size=batch_size, shuffle=shuffle)
-        validation_dataloader = DataLoader(validation, batch_size=batch_size, shuffle=shuffle)
+        validation_dataloader = DataLoader(validation, batch_size=len(validation), shuffle=shuffle)
 
         #Enable CUDA
         if has_cuda():
@@ -149,6 +150,24 @@ class BaseNetwork(Module):
         #Load the best parameters from training
         self.load()
 
+
+    def add_trend(self, x, dataset, time, road, timestep):
+        #convert time to TimeOfDay
+        time =[ (time[i].hour*60+round(time[i].minute,-1))/(22*60) for i in range(len(time))]
+    
+        df = dataset._historical_average.reset_index().pivot(index='TimeOfDay', columns='LinkRef',values='Speed')
+        
+        df = torch.tensor(df[df.index.isin(time)].values, dtype=torch.float)
+        
+        days = len(time)//len(df)
+        
+        #Repeat the trend for the number of days we have
+        df = df[:,road].repeat(days)
+        
+        output = x + df
+        return output
+    
+
     def get_MAE_score(self, dataset, timestep = 1,individual_roads=False):
         """
         Returns the MeanAbsoluteError on the test dataset
@@ -197,6 +216,8 @@ class BaseNetwork(Module):
 
         import matplotlib.pyplot as plt
         from datetime import datetime
+        import pytz
+        
 
         DL = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
 
@@ -212,19 +233,33 @@ class BaseNetwork(Module):
                 output = self(batch['data'])
             target = batch['target']
             time = batch['time']
+
+            output = output[:,timesteps-1,road]
+            target = target[:,timesteps-1,road]
+            
+
+            #time is in seconds, so create a function that can convert it into datetimes again
+            seconds_to_datetime = np.vectorize(datetime.fromtimestamp)
+            time = seconds_to_datetime(time, tz=pytz.utc)
+            time = time[:,timesteps-1]
+
+            
             #If input is normalized, we need to denormalize it
             if dataset.std is not None:
                 output = output*torch.tensor(dataset.std, device=device) + torch.tensor(dataset.mean, device=device)
                 target = target*torch.tensor(dataset.std, device=device) + torch.tensor(dataset.mean, device=device)
-        #time is in seconds, so create a function that can convert it into datetimes again
-        seconds_to_datetime = np.vectorize(datetime.fromtimestamp)
-        time = seconds_to_datetime(time)
+            
+            if dataset._historical_average is not None:
+                 output = self.add_trend(output, dataset, time, road, timesteps)
+                 target = self.add_trend(target, dataset, time, road, timesteps)
+
         
-        plt.plot(time[:,timesteps-1],output[:,timesteps-1,road].detach().cpu().numpy(), label='Prediction')
-        plt.plot(time[:,timesteps-1],target[:,timesteps-1,road].detach().cpu().numpy(), label='Truth')
+        plt.plot(time,output.detach().cpu().numpy(), label='Prediction')
+        plt.plot(time,target.detach().cpu().numpy(), label='Truth')
         plt.legend()
         plt.show()
 
+    
     def save(self, file_path = None):
         "Save the parameters of the model"      
         if file_path is None:

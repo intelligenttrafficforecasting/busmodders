@@ -54,6 +54,7 @@ class MoviaBusDataset(Dataset):
         self.dataframes = []
         self.mean = None
         self.std = None
+        self._historical_average = None
         self.__data_per_dataframe = 0
         self.__prev_timesteps = prev_timesteps
         self.__interpolation = interpolation
