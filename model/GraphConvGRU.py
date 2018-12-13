@@ -4,7 +4,7 @@ from torch import sigmoid, tanh
 import torch
 
 class GraphDiffusionConv(Module):
-    def __init__(self, input_size, kernels, output_size = 1, max_diffusion_step = 10, bias = True):
+    def __init__(self, input_size, kernels, output_size = 1, max_diffusion_step = 2, bias = True):
         """
         Args:
         - input_size (int) : the size of the input graph (number of nodes)
@@ -75,7 +75,7 @@ class GraphDiffusionConv(Module):
 
 class GraphConvGRUCell(Module):
     ""
-    def __init__(self, input_size, hidden_size, kernels,  max_diffusion_step = 10, activation = tanh, bias = True):
+    def __init__(self, input_size, hidden_size, kernels,  max_diffusion_step = 2, activation = tanh, bias = True):
         """
         
         Args:
@@ -111,7 +111,8 @@ class GraphConvGRUCell(Module):
         - hidden (batch_size, hidden)
         """
 
-        
+        #print(input.size())
+        #print(hidden.size())
 
         #Do two separate graph convolutions to get r and u
         r = sigmoid(self.gconv1(input, hidden))
@@ -187,24 +188,27 @@ class GraphConvGRU(Module):
         - hidden_out (num_layers, batch_size, hidden_size)
         """
         
-        batch_size, seq_len, _ = input.size()
-
-        #create tensor for output and final hidden state
-        output = torch.zeros(seq_len, batch_size, self.hidden_size)
-        hidden_out = torch.zeros(self.num_layers, batch_size, self.hidden_size)
 
         if self.batch_first:
-            #move batch to first dim
+            #move batch to second dim
             input = input.permute(1,0,2)
-            #output = output.permute(1,0,2)
-            #hidden_out = hidden_out.permute(1,0,2)
+
             if hidden is not None:
                 hidden = hidden.permute(1,0,2)
+
+        seq_len, batch_size, _ = input.size()
 
         if hidden is None:
             hidden = self.init_hidden(batch_size)
 
         
+
+        #create tensor for output and final hidden state
+        output = torch.zeros(seq_len, batch_size, self.hidden_size)
+        hidden_out = torch.zeros(self.num_layers, batch_size, self.hidden_size)
+
+
+        #print(hidden.size())
 
         #loop over each layer
         for layer in range(self.num_layers):
@@ -224,6 +228,11 @@ class GraphConvGRU(Module):
 
         #convert list of (batch_size, hidden) into (seq_len, batch_size, hidden)
         output = torch.stack(output_layer, dim=0)
+
+        if self.batch_first:
+            #move batch to first dim
+            output = output.permute(1,0,2)
+            hidden_out = hidden_out.permute(1,0,2)
 
         return output, hidden_out
 
