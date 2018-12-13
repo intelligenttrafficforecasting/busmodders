@@ -6,8 +6,8 @@ from MoviaBusDataset import MoviaBusDataset
 
 soi = MoviaBusDataset.section_of_interest
 
-def load_network(delete_nodes=[]):
-    road_network = gpd.read_file('../data/road_network.geojson').drop('id', axis = 1)
+def load_network(delete_nodes=[], path = '../data/road_network.geojson'):
+    road_network = gpd.read_file(path).drop('id', axis = 1)
     forward = road_network.copy().drop(['Oneway', 'MaxSpeedBackward'], axis = 1).rename({'MaxSpeedForward': 'MaxSpeed'}, axis = 1)
     forward['Heading'] = 'Forward'
     backward = road_network[lambda x: x['Oneway'] == 0].copy().drop(['Oneway', 'MaxSpeedForward'], axis = 1).rename({'Source': 'Target', 'Target': 'Source', 'MaxSpeedBackward': 'MaxSpeed'}, axis = 1)

@@ -1,19 +1,92 @@
 from torch.nn.modules.rnn import RNNCellBase
-from torch.nn import Module, ModuleList
-from torch.nn.functional import sigmoid
+from torch.nn import Module, ModuleList, Parameter, Linear
+from torch import sigmoid, tanh
+import torch
 
-class GraphConv(Module):
-    def __init__(self, kernels, output_size, max_diffusion_step = 10, bias = True):
+class GraphDiffusionConv(Module):
+    def __init__(self, input_size, kernels, output_size = 1, max_diffusion_step = 10, bias = True):
+        """
+        Args:
+        - input_size (int) : the size of the input graph (number of nodes)
+        - kernels (list of tensors): list of the kernels that should be used in the convolution
+        - output_size (int): Output size of the convolution. This corresponds to a number for each node in the graph, so currently this is fixed to 1
+        - max_diffusion_step (int): Number of diffusion steps to do in the convolution
+        - bias (boolean): Flag if the layer should use a bias
+        
+        """
         super().__init__()
+ 
+        if output_size != 1:
+            raise NotImplementedError("GraphDiffusionConv currenly only support one output from the graph")
+        
+        self.input_size = input_size
+        self.max_diffusion_step = max_diffusion_step
+        self.kernels = kernels
+        self.k_tot = len(self.kernels) * self.max_diffusion_step + 1
+
+        self.linear = Linear(in_features = 2 * self.k_tot, out_features = output_size, bias = bias) #the 2 is since we use both the input and hidden state
 
 
-    def forward(self, input):
-        pass
+    def forward(self,input, hidden = None):
+        """
+        Args:
+        - input (batch_size, input_size)
+        - hidden (batch_size, output_size) : When used with recurrent networks, the hidden state can be convolved at the same time
+        Returns:
+        - output (batch_size, input_size)
+        """
+
+        if hidden is  None:
+            raise NotImplementedError("GraphDiffusionConv only support RNN use, where both the input and hidden state is given")       
+
+        batch_size = input.size(0)
+
+        #stack input and hidden state to (batch_size, input_size, 2)
+        input_state = torch.stack([input, hidden], dim=2)
+        num_inputs = input_state.size(2)
+
+        x = input_state
+        x0 = x#.permute(1,2,0) # -> (input_size, 2, batch_size)
+        x = x0.unsqueeze(0) # -> (k_tot, input_size, 2, batch_size)
+        for kernel in self.kernels:
+            x1 = kernel.matmul(x0)
+            x = torch.cat((x, x1.unsqueeze(0)))
+
+            for k in range(2, self.max_diffusion_step + 1):
+                x2 = 2 * kernel.matmul(x1) - x0
+                x = torch.cat((x, x2.unsqueeze(0)))
+                x1, x0 = x2, x1
+
+
+        #the total number of diffusion steps across all kernels
+        k_tot = len(self.kernels) * self.max_diffusion_step + 1
+
+        x = x.view(k_tot, self.input_size, num_inputs, batch_size)
+        x = x.permute(3,1,2,0) # -> (batch_size, input_size, num_input, k_tot)
+        #reshape to 2d matrix, where each row corresponds to the one observation of the graph
+        x = x.contiguous().view(batch_size*self.input_size, num_inputs * k_tot)
+
+        #apply matmul + bias to get (batch_size*input_size, 1)
+        x = self.linear(x)
+
+        #finaly convert back to (batch_size, input_size)
+        x = x.view(batch_size, self.input_size)
+        return x
 
 class GraphConvGRUCell(Module):
     ""
-    def __init__(self, input_size, hidden_size, kernels,  max_diffusion_step = 10, activation = sigmoid, bias = True):
+    def __init__(self, input_size, hidden_size, kernels,  max_diffusion_step = 10, activation = tanh, bias = True):
+        """
         
+        Args:
+        - input_size (int): input size of the graph (number of nodes)
+        - hidden_size (int): The size of the output from the cell. Currently the output is fixed to the same as input
+        - kernels (list of tensors): The kernels that should be used for the convolution
+        - max_diffusion_step (int): number of diffusion steps to do in the convolution
+        - activation (function): The activation function to apply to the C gate in the cell. defaults to tanh
+        - bias (boolean): Flag if the layer should use a bias
+        
+        """
         super().__init__()
         
         self.input_size = input_size
@@ -21,9 +94,10 @@ class GraphConvGRUCell(Module):
         self.activation = activation
         self._max_diffusion_step = max_diffusion_step
 
-        self.kernels = []
-
-        self.gconv = GraphConv(kernels, hidden_size, max_diffusion_step = max_diffusion_step)
+        #we need to do 3 graph convolutions
+        self.gconv1 = GraphDiffusionConv(input_size, kernels = kernels, max_diffusion_step = max_diffusion_step, bias = bias)
+        self.gconv2 = GraphDiffusionConv(input_size, kernels = kernels, max_diffusion_step = max_diffusion_step, bias = bias)
+        self.gconv3 = GraphDiffusionConv(input_size, kernels = kernels, max_diffusion_step = max_diffusion_step, bias = bias)
         
 
     def forward(self, input, hidden):
@@ -38,18 +112,14 @@ class GraphConvGRUCell(Module):
         """
 
         
-        #We want to do graph convolution on both input and hidden state, so concat to one matrix
-        combined = torch.cat([input, hidden], dim=1)
-        
-        #Do two separate graph convolutions to get r and u
-        r = sigmoid(self.gconv(combined))
-        u = sigmoid(self.gconv(combined))
 
-        #to calculate c we need [X, r*H]
-        combined2 = torch.cat([input, r*hidden])
+        #Do two separate graph convolutions to get r and u
+        r = sigmoid(self.gconv1(input, hidden))
+        u = sigmoid(self.gconv2(input, hidden))
+
 
         #do a final graph convolution
-        C = self.activation(self.gconv(combined2))
+        C = self.activation(self.gconv2(input, r * hidden))
 
         #the output and hidden state of the GRU can now be updated
         output = hidden = u * hidden + (1 - u) * C
@@ -64,7 +134,20 @@ class GraphConvGRUCell(Module):
 
 class GraphConvGRU(Module):
 
-    def __init__(self, input_size, hidden_size, kernels, num_layers=1, bias=True, batch_first = False, dropout = 0):
+    def __init__(self, input_size, hidden_size, kernels, max_diffusion_step=2, num_layers=1, bias=True, batch_first = False, dropout = 0):
+        """
+        
+        Args:
+        - input_size (int): input size of the graph (number of nodes)
+        - hidden_size (int): The size of the output from the cell. Currently the output is fixed to the same as input
+        - kernels (list of tensors): The kernels that should be used for the convolution
+        - max_diffusion_step (int): number of diffusion steps to do in the convolution
+        - num_layers (int): Number of GRU cells to stack on top of each others
+        - bias (boolean): Flag if the layer should use a bias
+        - batch_first (boolean): Flag if the input has batch as the first dimension
+        - dropout (float): the dropout percentage to apply between the layers. Currently doesn't work
+        
+        """
         super().__init__()
 
         self.input_size = input_size
@@ -85,10 +168,11 @@ class GraphConvGRU(Module):
             #first layer should have input_size as input, while all others have hidden_size 
             current_input_size = input_size if i==0 else hidden_size
 
-            cells.append(GraphConvGRUCell(input_size=current_input_size,
-                                          hidden_size=hidden_size, 
-                                          kernels=kernels, 
-                                          bias=bias))
+            cells.append(GraphConvGRUCell(input_size = current_input_size,
+                                          hidden_size = hidden_size, 
+                                          max_diffusion_step = max_diffusion_step,
+                                          kernels = kernels, 
+                                          bias = bias))
 
         self.cells = ModuleList(cells)
     
@@ -112,9 +196,10 @@ class GraphConvGRU(Module):
         if self.batch_first:
             #move batch to first dim
             input = input.permute(1,0,2)
-            output = output.permute(1,0,2)
-            hidden_out = hidden_out.permute(1,0,2)
-            hidden = hidden.permute(1,0,2)
+            #output = output.permute(1,0,2)
+            #hidden_out = hidden_out.permute(1,0,2)
+            if hidden is not None:
+                hidden = hidden.permute(1,0,2)
 
         if hidden is None:
             hidden = self.init_hidden(batch_size)
@@ -144,4 +229,21 @@ class GraphConvGRU(Module):
 
 
     def init_hidden(self, batch_size):
-        return torch.zeros(batch_size, self.num_layers, self.hidden_size)
+        return torch.zeros(self.num_layers, batch_size, self.hidden_size)
+
+if __name__ == "__main__":
+    import sys
+    sys.path.append("DCRNN")
+    sys.path.append("misc")
+    from MoviaBusDataset import MoviaBusDataset
+    from lib.utils import calculate_normalized_laplacian
+    from data_loader import load_network, adjacency_matrix
+
+    a = torch.rand(25, 6, 192)
+    road_network = load_network(MoviaBusDataset.hack_filters, path='data/road_network.geojson')
+    adj_mat = adjacency_matrix(road_network)
+
+    sparse_mat = calculate_normalized_laplacian(torch.tensor(adj_mat, dtype=torch.float) + torch.eye(192))
+    laplacian = torch.tensor(sparse_mat.todense(), dtype=torch.float)
+    rnn = GraphConvGRU(input_size=192, hidden_size=192, kernels=[laplacian], batch_first=True)
+    rnn(a)
