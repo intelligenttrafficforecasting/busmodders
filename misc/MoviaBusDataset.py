@@ -6,8 +6,18 @@ from shapely.geometry import Point, LineString
 import glob
 import numpy as np
 from datetime import datetime
-from torch.cuda import is_available as has_cuda
 
+def has_cuda():
+    """Hack to check if CUDA is available. This fallbacks to CPU if you have GPU, but it's too old"""
+    import warnings
+    try:
+        with warnings.catch_warnings(record=True):
+            warnings.filterwarnings('error')
+            torch.cuda._check_capability()
+            return True
+    except:
+        return False
+        
 class MoviaBusDataset(Dataset):
     """Dataset for Movia Bus data"""
 
@@ -24,7 +34,7 @@ class MoviaBusDataset(Dataset):
                 max_future_time_steps = 1, 
                 timeofday = False, 
                 sequence_target = True, 
-                agg_time = 5 ,
+                agg_time = 10 ,
                 remove_trend = False
                 ):
         """
@@ -46,6 +56,7 @@ class MoviaBusDataset(Dataset):
         self.dataframes = []
         self.mean = None
         self.std = None
+        self._historical_average = None
         self.__data_per_dataframe = 0
         self.__prev_timesteps = prev_timesteps
         self.__interpolation = interpolation
@@ -185,7 +196,7 @@ class MoviaBusDataset(Dataset):
         df = df.set_index('Time')
 
         #Remove data during the night for now
-        df = df.between_time('06:00','21:59:59')
+        df = df.between_time('05:00','21:59:59')
         
         #Aggregate data for each road into 5min bins.
         df_5min = df.groupby([pd.Grouper(freq='{}Min'.format(self.__agg_time)),'LinkRef'])['Speed'].mean().reset_index(name='Speed')
@@ -254,29 +265,29 @@ class MoviaBusDataset(Dataset):
         dataframe_idx = idx // self.__data_per_dataframe
 
         #Calculate the index within the dataframe. The +1 is due to the fact that we want to index a slice, where the last element is disregarded
-        idx = (idx % self.__data_per_dataframe) + self.__prev_timesteps + 1
+        idx = (idx % self.__data_per_dataframe) + self.__prev_timesteps 
         #Add the additional prediction steps, and remove the 1 since we now want a real index and not a slice
-        idx_target = idx + self.__max_future_time_steps - 1
+        idx_target = idx + self.__max_future_time_steps + 1
 
         #Get the data for idx and previous time steps
-        data = torch.tensor(self.dataframes[dataframe_idx] [idx - self.__prev_timesteps - 1 : idx ].values, dtype=torch.float, device=device)
+        data = torch.tensor(self.dataframes[dataframe_idx] [idx - self.__prev_timesteps  : idx + 1 ].values, dtype=torch.float, device=device)
         
         
         if self.__sequence_target:
-            target = torch.tensor(self.dataframes[dataframe_idx] [idx : idx_target + 1].values, dtype=torch.float, device=device)[:,0:self.num_roads]    
+            target = torch.tensor(self.dataframes[dataframe_idx] [idx + 1: idx_target ].values, dtype=torch.float, device=device)[:,0:self.num_roads]    
             #Tensors can only handle numbers, so convert datetime to seconds
-            time = torch.tensor((self.dataframes[dataframe_idx].index[idx:idx_target + 1] - datetime(1970, 1, 1)).total_seconds(), device=device)
+            time = torch.tensor((self.dataframes[dataframe_idx].index[idx + 1:idx_target ] - datetime(1970, 1, 1)).total_seconds(), device=device)
         else:
-            target = torch.tensor(self.dataframes[dataframe_idx].iloc[idx_target].values, dtype=torch.float, device=device)[0:self.num_roads]
-            time = torch.tensor((self.dataframes[dataframe_idx].index[idx_target] - datetime(1970, 1, 1)).total_seconds(), device=device)
+            target = torch.tensor(self.dataframes[dataframe_idx].iloc[idx_target - 1].values, dtype=torch.float, device=device)[0:self.num_roads]
+            time = torch.tensor((self.dataframes[dataframe_idx].index[idx_target - 1] - datetime(1970, 1, 1)).total_seconds(), device=device)
             
 
 
         return {'data':data, 'target':target, 'time':time}
 
 if __name__ == "__main__":
-    train = MoviaBusDataset('data/train', interpolation=True, 
-                        prev_timesteps=3, 
-                        max_future_time_steps=5, 
-                        sequence_target=True)
+    train = MoviaBusDataset('data/test', interpolation=True, 
+                        prev_timesteps=6, 
+                        max_future_time_steps=6, 
+                        timeofday=True)
     train[0]
