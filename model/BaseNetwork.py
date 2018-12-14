@@ -30,6 +30,7 @@ class BaseNetwork(Module):
         #initialize class variables for readibility
         self.max_timestep = 0
         self.num_roads = 0
+        self.__target_to_net = False
 
         if name is None:
             self.__name = type(self).__name__
@@ -85,7 +86,7 @@ class BaseNetwork(Module):
 
         #Get how many time steps in the future we want to predict, and the number of roads
         self.max_timestep, self.num_roads = train[0]['target'].size()
-        
+
         #Create the data loaders
         train_dataloader = DataLoader(train, batch_size=batch_size, shuffle=shuffle)
         validation_dataloader = DataLoader(validation, batch_size=len(validation), shuffle=shuffle)
@@ -93,8 +94,6 @@ class BaseNetwork(Module):
         #Enable CUDA
         if has_cuda():
            self.cuda()
-
-        
 
         for epoch in range(num_epochs):
             self.train()
@@ -118,8 +117,7 @@ class BaseNetwork(Module):
                 
                 #Optimize the network
                 self.optimizer.step()
-
-                
+             
                 train_loss.append(loss.item())
 
             #Evaluate the results on the validation set
@@ -143,9 +141,7 @@ class BaseNetwork(Module):
                 #Save the best parameters
                 if np.mean(validation_loss) < self.min_loss:
                     self.min_loss = np.mean(validation_loss)
-                    self.save()
-
-                    
+                    self.save()                  
 
         #Load the best parameters from training
         self.load()
@@ -180,7 +176,8 @@ class BaseNetwork(Module):
            device = torch.device('cuda')
         
         DL = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
-
+        self.max_timestep, self.num_roads = dataset[0]['target'].size()
+        
         self.eval()
         for _, batch in enumerate(DL):
             if self.__target_to_net:
@@ -218,7 +215,7 @@ class BaseNetwork(Module):
         from datetime import datetime
         import pytz
         
-
+        self.max_timestep, self.num_roads = dataset[0]['target'].size()
         DL = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
 
         device = torch.device('cpu')
@@ -249,15 +246,19 @@ class BaseNetwork(Module):
                 output = output*torch.tensor(dataset.std, device=device) + torch.tensor(dataset.mean, device=device)
                 target = target*torch.tensor(dataset.std, device=device) + torch.tensor(dataset.mean, device=device)
             
+            #If input has historical average removed put it on again
             if dataset._historical_average is not None:
-                 output = self.add_trend(output, dataset, time, road, timesteps)
-                 target = self.add_trend(target, dataset, time, road, timesteps)
+                output = self.add_trend(output, dataset, time, road, timesteps)
+                target = self.add_trend(target, dataset, time, road, timesteps)
 
-        
         plt.plot(time,output.detach().cpu().numpy(), label='Prediction')
         plt.plot(time,target.detach().cpu().numpy(), label='Truth')
         plt.legend()
+        plt.xlabel('Time of day [MM:DD:HH]')
+        plt.ylabel('Mean speed [m/2]')
         plt.show()
+        
+        return time,output.detach().cpu().numpy(),target.detach().cpu().numpy()
 
     
     def save(self, file_path = None):
