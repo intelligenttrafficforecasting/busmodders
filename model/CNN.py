@@ -11,23 +11,28 @@ from torch.optim import Adam
 import sys
 sys.path.append("../DCRNN")
 sys.path.append("../misc")
-from lib.utils import calculate_normalized_laplacian
+from lib.utils import calculate_normalized_laplacian, calculate_random_walk_matrix
 from misc.data_loader import load_network, adjacency_matrix
 import torch.nn as nn
 import math
 from torch.nn.parameter import Parameter
 from torch.nn.modules import Module
 from MoviaBusDataset import MoviaBusDataset
+from functools import reduce
 class ConvolutionLayer(Module):
-    def __init__(self, laplacian, n_out, timesteps, bias=None):
+    def __init__(self, laplacian, n_out, timesteps, bias=None,n_diffusion_steps=1):
         super(ConvolutionLayer,self).__init__()
         self.n_roads = laplacian.shape[0]
-        self.laplacian = laplacian
+        self.laplacians = [None for _ in range(n_diffusion_steps)]
+        lap = laplacian.copy()
+        for i, _ in enumerate(self.laplacians):
+            self.laplacians[i] = lap
+            lap *= laplacian
         #self.bias = bias
         #self.l1  = Linear(n_in * self.n_nodes, n_out * self.n_nodes,bias = False)
         #self.weight = Parameter(torch.cuda.FloatTensor(n_in,self.n_nodes, n_out))
         #self.weight = Parameter(torch.cuda.FloatTensor(n_out,1,self.n_nodes, n_in))
-        self.theta = Parameter(torch.cuda.FloatTensor(n_out, 1, self.n_roads))
+        self.theta = [Parameter(torch.cuda.FloatTensor(n_out, 1, self.n_roads)) for _ in range(n_diffusion_steps)]
         self.omega = Parameter(torch.cuda.FloatTensor(timesteps))
         if bias:
             raise "Not implimented"
@@ -47,17 +52,18 @@ class ConvolutionLayer(Module):
 
     
     def forward(self,x):
-        y = self.laplacian.matmul(x)
-        y = y.unsqueeze(1)
+        for laplacian, theta in zip(self.laplacians, self.theta):
+            y = laplacian.matmul(x)
+            y = y.unsqueeze(1)
         #print(x.shape)
         #print("y " + str(y.shape))
         #y = y.reshape(shape[0],shape[1]*shape[2])
         #print(y.shape)
         #print("theta " +str(self.theta.shape))
         #y = self.l1(y)
-        y = self.theta.matmul(y)
+            y = self.theta.matmul(y)
         #print("y " + str(y.shape))
-        y = y.matmul(self.omega)
+            y = y.matmul(self.omega)
         #print("y " + str(y.shape))
         #y = y.reshape(shape)
         #y = y.squeeze(2)
@@ -72,7 +78,8 @@ class CNN(BaseNetwork):
         self.adj_mat = adjacency_matrix(self.road_network)
         #first order approx
         self.n_roads = self.adj_mat.shape[0]
-        sparse_mat = calculate_normalized_laplacian(self.adj_mat + torch.eye(self.n_roads))
+        #sparse_mat = calculate_normalized_laplacian(self.adj_mat + torch.eye(self.n_roads))
+        sparse_mat = calculate_random_walk_matrix(self.adj_mat)
         self.laplacian = torch.cuda.FloatTensor(sparse_mat.todense()) if torch.cuda.is_available()  else torch.FloatTensor(sparse_mat.todense())#self.convl1 = ConvolutionLayer(self.laplacian,(previous_timesteps+1),1)
         self.relu = ReLU()
         self.CNN = Sequential(
