@@ -75,7 +75,7 @@ class MoviaBusDataset(Dataset):
         for file in files:
             if verbose:
                 print('Loading file {}...'.format(file))
-            dataframe = self.__parse_file(file)
+            dataframe = self.__get_aggregated_data(file)
 
             #Each dataset contrains n points, but we need some for the previous steps, some for the future time steps, and  1 to conver from length to index
             self.__data_per_dataframe = len(dataframe) - self.__prev_timesteps - self.__max_future_time_steps 
@@ -140,6 +140,9 @@ class MoviaBusDataset(Dataset):
         def load_network(delete_nodes=[]):
             road_network = gpd.read_file('../data/road_network.geojson').drop('id', axis = 1)
             forward = road_network.copy().drop(['Oneway', 'MaxSpeedBackward'], axis = 1).rename({'MaxSpeedForward': 'MaxSpeed'}, axis = 1)
+            #forward['LinkRef'] = forward.apply(lambda r: '{WayId}:{Source}:{Target}'.format(**r), axis = 1)
+            #forward.set_index('LinkRef', inplace = True)
+            #print(len(forward[forward.index.isin(self.section_of_interest)]))
             forward['Heading'] = 'Forward'
             backward = road_network[lambda x: x['Oneway'] == 0].copy().drop(['Oneway', 'MaxSpeedForward'], axis = 1).rename({'Source': 'Target', 'Target': 'Source', 'MaxSpeedBackward': 'MaxSpeed'}, axis = 1)
             backward['geometry'] = backward['geometry'].apply(lambda x: LineString(reversed(x.coords)))
@@ -168,17 +171,18 @@ class MoviaBusDataset(Dataset):
         return adjacency_matrix(load_network(delete_nodes=self.hack_filters))
     
         
-        
-    def __parse_file(self, file):
+    @staticmethod
+    def parse_file(file,remove_stops=True):
         df = pd.read_csv(file)
         #filter out sections of interest
-        df = df[df['LinkRef'].isin(self.section_of_interest)]
+        df = df[df['LinkRef'].isin(MoviaBusDataset.section_of_interest)]
 
         #Only consider 1A, 4A and 8A busses
         data_filter = df['JourneyRef'].str.extract('(?P<OperatingDayDate>\d{8})L(?P<LineNumber>\d{4})')['LineNumber'].astype(float).isin([1, 4, 8])
         
         #Remove busses at stopping points
-        data_filter &= df['StopPointRef'].isnull()
+        if remove_stops:
+            data_filter &= df['StopPointRef'].isnull()
         
         #Hack to fix missing values
         for link in MoviaBusDataset.hack_filters:
@@ -197,7 +201,9 @@ class MoviaBusDataset(Dataset):
 
         #Remove data during the night for now
         df = df.between_time('05:00','21:59:59')
-        
+        return df
+    def __get_aggregated_data(self,file):
+        df = self.parse_file(file)
         #Aggregate data for each road into 5min bins.
         df_5min = df.groupby([pd.Grouper(freq='{}Min'.format(self.__agg_time)),'LinkRef'])['Speed'].mean().reset_index(name='Speed')
 
