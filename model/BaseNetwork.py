@@ -202,7 +202,7 @@ class BaseNetwork(Module):
                 loss = self.criterion(output[:,timestep-1,:],target[:,timestep-1,:])
                 return loss.item()
 
-    def visualize_road(self, dataset, timesteps=1, road=1):
+    def visualize_road(self, dataset, timesteps=1, road=1,return_values=False):
         """
         Visualizes the predictions compared to the ground truth for a particular road
 
@@ -258,7 +258,8 @@ class BaseNetwork(Module):
         plt.ylabel('Mean speed [m/2]')
         plt.show()
         
-        return time,output.detach().cpu().numpy(),target.detach().cpu().numpy()
+        if return_values:
+            return time,output.detach().cpu().numpy(),target.detach().cpu().numpy()
 
     
     def save(self, file_path = None):
