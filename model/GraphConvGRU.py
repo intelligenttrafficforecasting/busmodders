@@ -99,16 +99,16 @@ class GraphConvGRUCell(Module):
         self.gconv2 = GraphDiffusionConv(input_size, kernels = kernels, max_diffusion_step = max_diffusion_step, bias = bias)
         self.gconv3 = GraphDiffusionConv(input_size, kernels = kernels, max_diffusion_step = max_diffusion_step, bias = bias)
         
-
+        self.linear = Linear(in_features = input_size, out_features = hidden_size)
     def forward(self, input, hidden):
         """
         Args:
         - input (batch_size, input_size)
-        - hidden (batch_size, hidden_size)
+        - hidden (batch_size, input_size)
 
         Returns:
-        - output (batch_size, hidden)
-        - hidden (batch_size, hidden)
+        - output (batch_size, hidden_size)
+        - hidden (batch_size, input_size)
         """
 
         #print(input.size())
@@ -124,6 +124,10 @@ class GraphConvGRUCell(Module):
 
         #the output and hidden state of the GRU can now be updated
         output = hidden = u * hidden + (1 - u) * C
+
+        #in case we want a different output size than intput
+        if self.hidden_size != self.input_size:
+            output = self.linear(output)
 
         return output, hidden
 
