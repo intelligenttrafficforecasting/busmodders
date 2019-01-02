@@ -87,9 +87,9 @@ class MoviaBusDataset(Dataset):
         if remove_trend:
             self.remove_trend()
             
-    @property
-    def adjacency_matrix(self):
-        return self.__adjacency_matrix if self.__adjacency_matrix else self.__get_adjacency_matrix()
+    #@property
+    def adjacency_matrix(self,add_identity=False,weigh_bad = False):
+        return self.__adjacency_matrix if self.__adjacency_matrix else self.__get_adjacency_matrix(add_identity,weigh_bad)
 
     def remove_trend(self,historical_average = None):
         if historical_average is None:
@@ -136,7 +136,7 @@ class MoviaBusDataset(Dataset):
             
             self.dataframes[i] = df
 
-    def __get_adjacency_matrix(self):
+    def __get_adjacency_matrix(self,add_identity=False,weigh_bad = False):
         def load_network(delete_nodes=[]):
             road_network = gpd.read_file('../data/road_network.geojson').drop('id', axis = 1)
             forward = road_network.copy().drop(['Oneway', 'MaxSpeedBackward'], axis = 1).rename({'MaxSpeedForward': 'MaxSpeed'}, axis = 1)
@@ -163,11 +163,21 @@ class MoviaBusDataset(Dataset):
             return road_network
     
         def adjacency_matrix(road_network):
+            if weigh_bad:
+                stats = pd.read_csv('../stats.csv')
+                
             nodes = road_network[road_network.index.isin(self.section_of_interest)].index.values
             adjacency_matrix_ = pd.DataFrame(index = nodes, columns = nodes)
             for s in nodes:
                 adjacency_matrix_.loc[s,:] = (road_network.loc[s]['Target'] == road_network.loc[nodes]['Source']).astype(int)
-            return adjacency_matrix_.values
+                if weigh_bad and s in stats[stats.mean_diff>2.5]['LinkRef'].values:
+                    adjacency_matrix_.loc[s,:] = np.zeros(len( adjacency_matrix_.loc[s,:]))
+            adjacency_matrix_np = adjacency_matrix_.values
+            if add_identity:
+                adjacency_matrix_np += np.diag([1 for _ in adjacency_matrix_np])
+            #Such that in_edges is rows and out edges_columns
+            adjacency_matrix_np = adjacency_matrix_np.T
+            return adjacency_matrix_np
         return adjacency_matrix(load_network(delete_nodes=self.hack_filters))
     
         
