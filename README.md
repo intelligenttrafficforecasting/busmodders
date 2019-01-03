@@ -1,12 +1,10 @@
 # busmodders
 This repository uses deep learning models for predicting speeds of public busses in the Valby area, Copenhagen, using bus GPS data from [Movia](https://www.moviatrafik.dk/).
 
-#dependencies
-
 # results
 Main models and results are found in a [Jupyter](https://jupyter.org/) [notebook](../master/model/EVERYTHING.ipynb). To run the code the dataset provided by [Movia](https://www.moviatrafik.dk/) is needed.
 
-# requirements
+# requirements/dependencies
 - python>=3.6.0
 ## python packages
 - jupyter>=4.4.0
@@ -19,3 +17,5 @@ Main models and results are found in a [Jupyter](https://jupyter.org/) [notebook
 - folium>=0.6.0
 - branca>=0.3.1
 - geopandas>=0.4.0
+## git submodules
+- [DCRNN FORK](https://github.com/intelligenttrafficforecasting/DCRNN)
