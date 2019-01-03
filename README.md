@@ -4,7 +4,7 @@ This repository uses deep learning models for predicting speeds of public busses
 #dependencies
 
 # results
-Main models and results are found in a [Jupyter](https://jupyter.org/) [notebook](../master/model/EVERYTHING.ipynb)
+Main models and results are found in a [Jupyter](https://jupyter.org/) [notebook](../master/model/EVERYTHING.ipynb). To run the code the dataset provided by [Movia](https://www.moviatrafik.dk/) is needed.
 
 # requirements
 - python>=3.6.0
